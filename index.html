@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex"><title>HouseOfC</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&family=Alegreya+Sans:wght@400;700&display=swap">
+<style>
+  :root{--paper:#FBF7F1;--ink:#253B33;--soft:#5C6E64;--line:#E3D9C9;--accent:#D0862B;--accent-deep:#8F5D12;--surface:#F4EDE2;--warn:#A14D22}
+  @media(prefers-color-scheme:dark){:root{--paper:#17211D;--ink:#EDE6D8;--soft:#A9B5AC;--line:#32403A;--accent:#E2A64A;--accent-deep:#E9BB6C;--surface:#1F2B26;--warn:#E08D5F}}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.5 "Alegreya Sans",system-ui,sans-serif;
+    min-height:100dvh;display:grid;place-items:center}
+  .e-line{font-size:.8rem;color:var(--soft);margin-top:14px}
+  .e-line a{color:var(--warn);font-weight:700;text-decoration:none}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:32px 28px;width:min(88vw,340px);text-align:center}
+  h1{font-family:"Young Serif",Georgia,serif;font-weight:400;font-size:1.6rem;margin:10px 0 4px}
+  p{color:var(--soft);margin:0 0 18px;font-size:.92rem}
+  input{width:100%;box-sizing:border-box;font:inherit;padding:12px;border:1px solid var(--line);border-radius:10px;
+    background:var(--paper);color:var(--ink);text-align:center}
+  input:focus{outline:2px solid var(--accent);border-color:var(--accent)}
+  .pw-row{display:flex;gap:8px}
+  .pw-row input{flex:1;min-width:0}
+  .pw-row #peek{width:auto;flex:none;margin:0;padding:12px 14px;font:700 .8rem "Alegreya Sans",sans-serif;
+    background:transparent;color:var(--soft);border:1px solid var(--line);border-radius:10px;cursor:pointer}
+  button{width:100%;font:700 1rem "Alegreya Sans",sans-serif;margin-top:12px;padding:13px;border:0;border-radius:10px;
+    background:var(--accent-deep);color:var(--paper);cursor:pointer}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .err{color:var(--warn);font-size:.85rem;min-height:1.2em;margin-top:10px}
+</style></head><body>
+<form class="card" id="f">
+  <svg width="36" height="36" viewBox="0 0 40 40" aria-hidden="true"><path d="M20 5 L36 18 L36 36 L4 36 L4 18 Z" fill="none" stroke="var(--accent-deep)" stroke-width="2.5"/><path d="M26 22 a7 7 0 1 0 0 9" fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round"/></svg>
+  <h1>HouseOfC</h1>
+  <p>Family only — the password Justin gave you.</p>
+  <div class="pw-row">
+    <input id="pw" type="password" autocomplete="current-password" placeholder="password" aria-label="Family password" autofocus>
+    <button type="button" id="peek">show</button>
+  </div>
+  <button>Open</button>
+  <div class="err" id="err" role="status" aria-live="polite"></div>
+  <p class="e-line">In an emergency, don't wait for this page — call <a href="tel:112">112</a>.<br>Urgent but not life-threatening: huisarts out-of-hours <a href="tel:1733">1733</a>.</p>
+</form>
+<script>
+(function(){
+  var B=function(s){return Uint8Array.from(atob(s),function(c){return c.charCodeAt(0)})}
+  var payload=null
+  function loadPayload(){return fetch('payload.json?t='+Date.now(),{cache:'no-store'}).then(function(r){
+    if(!r.ok)throw new Error('payload '+r.status);return r.json()}).then(function(p){payload=p;return p})}
+  function show(html){document.open();document.write(html);document.close()}
+  async function tryKey(key){
+    var p=payload||await loadPayload()
+    var plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:B(p.iv)},key,B(p.data))
+    show(new TextDecoder().decode(plain));return true}
+  async function fromPw(pw,p){var km=await crypto.subtle.importKey('raw',new TextEncoder().encode(pw),'PBKDF2',false,['deriveKey']);
+    return crypto.subtle.deriveKey({name:'PBKDF2',salt:B(p.salt),iterations:310000,hash:'SHA-256'},km,{name:'AES-GCM',length:256},true,['decrypt'])}
+  var peek=document.getElementById('peek'),pwEl=document.getElementById('pw')
+  if(peek){peek.addEventListener('click',function(){
+    var showing=pwEl.type==='text'
+    pwEl.type=showing?'password':'text'
+    peek.textContent=showing?'show':'hide'
+    pwEl.focus()
+  })}
+  loadPayload().then(function(){
+    try{var saved=localStorage.getItem('hoc-key');
+      if(saved){crypto.subtle.importKey('raw',B(saved),{name:'AES-GCM'},false,['decrypt']).then(tryKey).catch(function(){})}}catch(e){}
+  }).catch(function(){document.getElementById('err').textContent='Could not reach the dashboard data — check your connection.'})
+  document.getElementById('f').addEventListener('submit',async function(ev){ev.preventDefault()
+    var err=document.getElementById('err');err.textContent=''
+    try{var p=payload||await loadPayload()
+      var key=await fromPw(document.getElementById('pw').value,p)
+      var plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:B(p.iv)},key,B(p.data))
+      try{var raw=await crypto.subtle.exportKey('raw',key);localStorage.setItem('hoc-key',btoa(String.fromCharCode.apply(null,new Uint8Array(raw))))}catch(e){}
+      show(new TextDecoder().decode(plain))
+    }catch(e){err.textContent='That is not it — check with Justin.'}
+  })
+})()
+</script></body></html>
