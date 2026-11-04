@@ -1,0 +1,1 @@
+Encrypted HouseOfC dashboard. Nothing here is readable without the family password.
